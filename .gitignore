@@ -54,8 +54,6 @@ DGCNN/dgcnn_pytorch/data/
 DGCNN/dgcnn_pytorch/outputs/
 DGCNN/dgcnn_pytorch/.DS_Store
 
-
-
 # Python cache files
 __pycache__/
 *.py[cod]
