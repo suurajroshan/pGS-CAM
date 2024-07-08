@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--checkpoint_path', default='output/checkpoint_60.tar', help='Model checkpoint path [default: None]')
+parser.add_argument('--checkpoint_path', default='dgcnn_pytorch/outputs/segmseg_s3dis_6/model_6.tar', help='Model checkpoint path [default: None]')
 parser.add_argument('--log_dir', default='output', help='Dump dir to save model checkpoint [default: log]')
 parser.add_argument('--max_epoch', type=int, default=400, help='Epoch to run [default: 180]')
 parser.add_argument('--batch_size', type=int, default=1, help='Batch Size during training [default: 8]')
@@ -39,29 +39,23 @@ def my_worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
 
 transform_map = {
-          0: "car",
-          1: "bicycle",
-          2: "motorcycle",
-          3: "truck",
-          4: "other-vehicle",
-          5: "person",
-          6: "bicyclist",
-          7: "motorcyclist",
-          8: "road",
-          9: "parking",
-          10: "sidewalk",
-          11: "other-ground",
-          12: "building",
-          13: "fence",
-          14: "vegetation",
-          15: "trunk",
-          16: "terrain",
-          17: "pole",
-          18: "traffic-sign"
+          0: "ceiling",
+          1: "floor",
+          2: "wall",
+          3: "beam",
+          4: "column",
+          5: "window",
+          6: "door",
+          7: "table",
+          8: "chair",
+          9: "sofa",
+          10: "bookcase",
+          11: "board",
+          12: "clutter"
 }    
 
 
-eval_class = 0 # car
+eval_class = 8 # chair
 # EVAL_DATASET = SemanticKITTI('cam_eval', transform_map[eval_class])
 # EVAL_DATALOADER = DataLoader(EVAL_DATASET, batch_size=FLAGS.batch_size, shuffle=True, num_workers=20,
 #                             worker_init_fn=my_worker_init_fn, collate_fn=EVAL_DATASET.collate_fn)

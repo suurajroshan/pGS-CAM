@@ -16,7 +16,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR
-from data import S3DIS
+from data import S3DIS, our_data
 from model import DGCNN_semseg_s3dis
 import numpy as np
 from torch.utils.data import DataLoader
@@ -30,6 +30,8 @@ global room_pred
 room_pred = []
 global visual_warning
 visual_warning = True
+global custom_dataset
+custom_dataset = '/mnt/c/faps/data/Baseline_Model/'
 
 def _init_():
     if not os.path.exists('outputs'):
@@ -45,14 +47,24 @@ def _init_():
 
 
 def calculate_sem_IoU(pred_np, seg_np, visual=False):
-    I_all = np.zeros(13)
-    U_all = np.zeros(13)
-    for sem_idx in range(seg_np.shape[0]):
-        for sem in range(13):
-            I = np.sum(np.logical_and(pred_np[sem_idx] == sem, seg_np[sem_idx] == sem))
-            U = np.sum(np.logical_or(pred_np[sem_idx] == sem, seg_np[sem_idx] == sem))
-            I_all[sem] += I
-            U_all[sem] += U
+    if args.custom_mode:
+        I_all = np.zeros(args.num_features)
+        U_all = np.zeros(args.num_features)
+        for sem_idx in range(seg_np.shape[0]):
+            for sem in range(args.num_features):
+                I = np.sum(np.logical_and(pred_np[sem_idx] == sem, seg_np[sem_idx] == sem))
+                U = np.sum(np.logical_or(pred_np[sem_idx] == sem, seg_np[sem_idx] == sem))
+                I_all[sem] += I
+                U_all[sem] += U
+    else:
+        I_all = np.zeros(13)
+        U_all = np.zeros(13)
+        for sem_idx in range(seg_np.shape[0]):
+            for sem in range(13):
+                I = np.sum(np.logical_and(pred_np[sem_idx] == sem, seg_np[sem_idx] == sem))
+                U = np.sum(np.logical_or(pred_np[sem_idx] == sem, seg_np[sem_idx] == sem))
+                I_all[sem] += I
+                U_all[sem] += U
     return I_all / U_all 
 
 
@@ -143,11 +155,16 @@ def visualization(visu, visu_format, test_choice, data, seg, pred, visual_file_i
             
         
 def train(args, io):
-    train_loader = DataLoader(S3DIS(partition='train', num_points=args.num_points, test_area=args.test_area), 
+    if args.custom_mode:
+        train_loader = DataLoader(our_data(partition='train', num_points=args.num_points, data_path=custom_dataset), 
                               num_workers=8, batch_size=args.batch_size, shuffle=True, drop_last=True)
-    test_loader = DataLoader(S3DIS(partition='test', num_points=args.num_points, test_area=args.test_area), 
+        test_loader = DataLoader(our_data(partition='val', num_points=args.num_points, data_path=custom_dataset), 
                             num_workers=8, batch_size=args.test_batch_size, shuffle=True, drop_last=False)
-
+    else:
+        train_loader = DataLoader(S3DIS(partition='train', num_points=args.num_points, test_area=args.test_area), 
+                              num_workers=8, batch_size=args.batch_size, shuffle=True, drop_last=True)
+        test_loader = DataLoader(S3DIS(partition='test', num_points=args.num_points, test_area=args.test_area), 
+                            num_workers=8, batch_size=args.test_batch_size, shuffle=True, drop_last=False)
     device = torch.device("cuda" if args.cuda else "cpu")
 
     #Try to load models
@@ -155,9 +172,17 @@ def train(args, io):
         model = DGCNN_semseg_s3dis(args).to(device)
     else:
         raise Exception("Not implemented")
-    print(str(model))
-
     model = nn.DataParallel(model)
+    if args.custom_mode: 
+        print('Loading pretrain model... ')
+        model.load_state_dict(torch.load(os.path.join(args.model_root, 'pretrained_model.tar' )))
+        print('Pretrain model loaded!')
+    if args.custom_mode:
+        model.module.conv9 = nn.Conv1d(256, args.num_features, kernel_size=1, bias=False)
+        nn.init.kaiming_normal_(model.module.conv9.weight)
+    model = model.to(device)
+    print(str(model))
+    
     print("Let's use", torch.cuda.device_count(), "GPUs!")
 
     if args.use_sgd:
@@ -194,7 +219,10 @@ def train(args, io):
             opt.zero_grad()
             seg_pred = model(data)
             seg_pred = seg_pred.permute(0, 2, 1).contiguous()
-            loss = criterion(seg_pred.view(-1, 13), seg.view(-1,1).squeeze())
+            if args.custom_mode:
+                loss = criterion(seg_pred.view(-1, args.num_features), seg.view(-1,1).squeeze())
+            else:
+                loss = criterion(seg_pred.view(-1, 13), seg.view(-1,1).squeeze())
             loss.backward()
             opt.step()
             pred = seg_pred.max(dim=2)[1]               # (batch_size, num_points)
@@ -244,7 +272,10 @@ def train(args, io):
             batch_size = data.size()[0]
             seg_pred = model(data)
             seg_pred = seg_pred.permute(0, 2, 1).contiguous()
-            loss = criterion(seg_pred.view(-1, 13), seg.view(-1,1).squeeze())
+            if args.custom_mode:
+                loss = criterion(seg_pred.view(-1, args.num_features), seg.view(-1,1).squeeze())
+            else:
+                loss = criterion(seg_pred.view(-1, 13), seg.view(-1,1).squeeze())
             pred = seg_pred.max(dim=2)[1]
             count += batch_size
             test_loss += loss.item() * batch_size
@@ -269,7 +300,7 @@ def train(args, io):
         io.cprint(outstr)
         if np.mean(test_ious) >= best_test_iou:
             best_test_iou = np.mean(test_ious)
-            torch.save(model.state_dict(), 'outputs/%s/models/model_%s.tar' % (args.exp_name, args.test_area))
+            torch.save(model.state_dict(), 'outputs/models/model_train.tar')
 
 
 def test(args, io):
@@ -286,9 +317,13 @@ def test(args, io):
                     if (line[5]) == test_area:
                         break
                     visual_file_index = visual_file_index + 1
-        if (args.test_area == 'all') or (test_area == args.test_area):
-            test_loader = DataLoader(S3DIS(partition='test', num_points=args.num_points, test_area=test_area),
+        if args.custom_mode:
+            test_loader = DataLoader(our_data(partition='test', num_points=args.num_points, test_area=test_area),
                                      batch_size=args.test_batch_size, shuffle=False, drop_last=False)
+        else:
+            if (args.test_area == 'all') or (test_area == args.test_area):
+                test_loader = DataLoader(S3DIS(partition='test', num_points=args.num_points, test_area=test_area),
+                                        batch_size=args.test_batch_size, shuffle=False, drop_last=False)
 
             device = torch.device("cuda" if args.cuda else "cpu")
                         
@@ -398,12 +433,16 @@ if __name__ == "__main__":
                         help='Dimension of embeddings')
     parser.add_argument('--k', type=int, default=20, metavar='N',
                         help='Num of nearest neighbors to use')
-    parser.add_argument('--model_root', type=str, default='', metavar='N',
+    parser.add_argument('--model_root', type=str, default='./outputs/models/', metavar='N',
                         help='Pretrained model root')
     parser.add_argument('--visu', type=str, default='',
                         help='visualize the model')
     parser.add_argument('--visu_format', type=str, default='ply',
                         help='file format of visualization')
+    parser.add_argument('--custom_mode', type=bool, required=True,
+                        help='True when using custom dataset')
+    parser.add_argument('--num_features', type=int, default=5,
+                        help='Number of classes')
     args = parser.parse_args()
 
     _init_()

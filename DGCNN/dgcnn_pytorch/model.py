@@ -327,7 +327,7 @@ class DGCNN_semseg_s3dis(nn.Module):
         self.bn7 = nn.BatchNorm1d(512)
         self.bn8 = nn.BatchNorm1d(256)
 
-        self.conv1 = nn.Sequential(nn.Conv2d(18, 64, kernel_size=1, bias=False),
+        self.conv1 = nn.Sequential(nn.Conv2d(12, 64, kernel_size=1, bias=False),
                                    self.bn1,
                                    nn.LeakyReLU(negative_slope=0.2))
         self.conv2 = nn.Sequential(nn.Conv2d(64, 64, kernel_size=1, bias=False),
