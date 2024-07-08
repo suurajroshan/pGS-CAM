@@ -39,23 +39,15 @@ def my_worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
 
 transform_map = {
-          0: "ceiling",
-          1: "floor",
-          2: "wall",
-          3: "beam",
-          4: "column",
-          5: "window",
-          6: "door",
-          7: "table",
-          8: "chair",
-          9: "sofa",
-          10: "bookcase",
-          11: "board",
-          12: "clutter"
+          1: "a",
+          2: "b",
+          3: "c",
+          4: "d",
+          7: "e"
 }    
 
 
-eval_class = 8 # chair
+eval_class = 1 # b
 # EVAL_DATASET = SemanticKITTI('cam_eval', transform_map[eval_class])
 # EVAL_DATALOADER = DataLoader(EVAL_DATASET, batch_size=FLAGS.batch_size, shuffle=True, num_workers=20,
 #                             worker_init_fn=my_worker_init_fn, collate_fn=EVAL_DATASET.collate_fn)
